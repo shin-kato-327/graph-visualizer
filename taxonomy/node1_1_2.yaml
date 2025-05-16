@@ -1,0 +1,8 @@
+---
+name: node1_1_2
+description: node1_1_2 description
+owner: karen
+childof: node1_1
+benchmark:
+  - MMLU
+  - GQPA Diamond
