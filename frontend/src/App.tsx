@@ -12,6 +12,8 @@ function App() {
   const [ownerFilter, setOwnerFilter] = useState<string>('All');
   const [owners, setOwners] = useState<string[]>([]);
   const [verticalSpacing, setVerticalSpacing] = useState(60);
+  const [zoomLevel, setZoomLevel] = useState(0.6);
+  const [translate, setTranslate] = useState({ x: 100, y: 200 });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -103,19 +105,17 @@ function App() {
   return (
     <Container maxWidth="lg" sx={{ mt: 4 }}>
       <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
-        <FormControl sx={{ minWidth: 200 }}>
-          <InputLabel id="owner-select-label">Owner</InputLabel>
-          <Select
-            labelId="owner-select-label"
-            value={ownerFilter}
-            label="Owner"
-            onChange={e => setOwnerFilter(e.target.value)}
-          >
-            {owners.map(owner => (
-              <MenuItem key={owner} value={owner}>{owner}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        <Box sx={{ minWidth: 250 }}>
+          <Typography gutterBottom>Zoom</Typography>
+          <Slider
+            value={zoomLevel}
+            min={0.2}
+            max={2.0}
+            step={0.05}
+            onChange={(_, value) => setZoomLevel(value as number)}
+            valueLabelDisplay="auto"
+          />
+        </Box>
         <Box sx={{ minWidth: 250 }}>
           <Typography gutterBottom>Vertical Space Between Levels</Typography>
           <Slider
@@ -140,6 +140,8 @@ function App() {
                   pathFunc="step"
                   nodeSize={{ x: 200, y: verticalSpacing }}
                   separation={{ siblings: 2, nonSiblings: 2.5 }}
+                  zoom={zoomLevel}
+                  translate={translate}
                   renderCustomNodeElement={({ nodeDatum }) => {
                     const isSelected = selectedNode && nodeDatum.name === selectedNode.name;
                     const isOwnedBySelected = ownerFilter !== 'All' && nodeDatum.attributes?.owner === ownerFilter;
