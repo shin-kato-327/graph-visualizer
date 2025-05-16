@@ -138,6 +138,8 @@ function App() {
                     } else if (nodeDatum.children) {
                       fillColor = '#888';
                     }
+                    // Split node name into words and render each on a new line
+                    const words = nodeDatum.name.split(' ');
                     return (
                       <g
                         style={{ cursor: 'pointer' }}
@@ -153,10 +155,21 @@ function App() {
                           });
                         }}
                       >
-                        <circle r={15} fill={fillColor} stroke="#333" strokeWidth={2} />
-                        <text fill="#222" stroke="none" x={20} y={5} fontSize={16} fontWeight="bold">
-                          {nodeDatum.name}
+                        <text
+                          fill="#222"
+                          stroke="none"
+                          x={0}
+                          y={-22 - (words.length - 1) * 18}
+                          fontSize={16}
+                          fontWeight="bold"
+                          textAnchor="middle"
+                          style={{ pointerEvents: 'none' }}
+                        >
+                          {words.map((word, i) => (
+                            <tspan key={i} x={0} dy={i === 0 ? 0 : 18}>{word}</tspan>
+                          ))}
                         </text>
+                        <circle r={15} fill={fillColor} stroke="#333" strokeWidth={2} />
                       </g>
                     );
                   }}
@@ -165,11 +178,11 @@ function App() {
             )}
           </Paper>
         </Box>
-        <Box sx={{ flex: 1 }}>
-          <Paper sx={{ p: 2, height: '80vh' }}>
+        <Box sx={{ flex: 1, minWidth: 0, width: 400 }}>
+          <Paper sx={{ p: 2, height: '80vh', width: 400, boxSizing: 'border-box', overflow: 'hidden' }}>
             {selectedNode ? (
               <>
-                <pre style={{ background: '#f5f5f5', padding: '12px', borderRadius: '6px', fontSize: '14px', overflowX: 'auto' }}>
+                <pre style={{ background: '#f5f5f5', padding: '12px', borderRadius: '6px', fontSize: '14px', overflowX: 'auto', maxWidth: '100%' }}>
                   <code>
                     {dump(selectedNode)}
                   </code>
