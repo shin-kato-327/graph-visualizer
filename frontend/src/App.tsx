@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Box, Paper, Typography, FormControl, InputLabel, Select, MenuItem } from '@mui/material';
+import { Container, Box, Paper, Typography, FormControl, InputLabel, Select, MenuItem, Slider } from '@mui/material';
 import Tree from 'react-d3-tree';
 import axios from 'axios';
 import { TaxonomyNode, TreeNode } from './types';
@@ -11,6 +11,7 @@ function App() {
   const [allNodes, setAllNodes] = useState<TaxonomyNode[]>([]);
   const [ownerFilter, setOwnerFilter] = useState<string>('All');
   const [owners, setOwners] = useState<string[]>([]);
+  const [verticalSpacing, setVerticalSpacing] = useState(60);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -101,7 +102,7 @@ function App() {
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4 }}>
-      <Box sx={{ mb: 2 }}>
+      <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
         <FormControl sx={{ minWidth: 200 }}>
           <InputLabel id="owner-select-label">Owner</InputLabel>
           <Select
@@ -115,6 +116,17 @@ function App() {
             ))}
           </Select>
         </FormControl>
+        <Box sx={{ minWidth: 250 }}>
+          <Typography gutterBottom>Vertical Space Between Levels</Typography>
+          <Slider
+            value={verticalSpacing}
+            min={20}
+            max={150}
+            step={5}
+            onChange={(_, value) => setVerticalSpacing(value as number)}
+            valueLabelDisplay="auto"
+          />
+        </Box>
       </Box>
       <Box sx={{ display: 'flex', gap: 3 }}>
         <Box sx={{ flex: 2 }}>
@@ -126,6 +138,7 @@ function App() {
                   orientation="horizontal"
                   onNodeClick={handleNodeClick}
                   pathFunc="step"
+                  nodeSize={{ x: 200, y: verticalSpacing }}
                   separation={{ siblings: 2, nonSiblings: 2.5 }}
                   renderCustomNodeElement={({ nodeDatum }) => {
                     const isSelected = selectedNode && nodeDatum.name === selectedNode.name;
