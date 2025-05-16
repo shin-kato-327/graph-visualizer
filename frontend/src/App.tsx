@@ -145,7 +145,7 @@ function App() {
                     const isOwnedBySelected = ownerFilter !== 'All' && nodeDatum.attributes?.owner === ownerFilter;
                     let fillColor = '#fff';
                     if (isSelected) {
-                      fillColor = '#fff';
+                      fillColor = '#90ee90';
                     } else if (isOwnedBySelected) {
                       fillColor = 'orange';
                     } else if (nodeDatum.children) {
