@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Box, Paper, Typography, FormControl, InputLabel, Select, MenuItem, Slider, Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import { Container, Box, Paper, Typography, FormControl, InputLabel, Select, MenuItem, Slider, Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions, InputAdornment, IconButton } from '@mui/material';
 import Tree from 'react-d3-tree';
 import axios from 'axios';
 import { TaxonomyNode, TreeNode } from './types';
 import { dump } from 'js-yaml';
+import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
 
 function App() {
   const [treeData, setTreeData] = useState<TreeNode | null>(null);
@@ -20,6 +22,8 @@ function App() {
     description: '',
     owner: '',
   });
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [matchedNodeNames, setMatchedNodeNames] = useState<string[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -182,9 +186,49 @@ function App() {
     }
   };
 
+  // Search handler
+  const handleSearch = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!searchKeyword.trim()) {
+      setMatchedNodeNames([]);
+      return;
+    }
+    const keyword = searchKeyword.trim().toLowerCase();
+    const matched = allNodes
+      .filter(node => node.name.toLowerCase().includes(keyword))
+      .map(node => node.name);
+    setMatchedNodeNames(matched);
+  };
+
+  const handleClearSearch = () => {
+    setSearchKeyword('');
+    setMatchedNodeNames([]);
+  };
+
   return (
     <Container maxWidth="lg" sx={{ mt: 4 }}>
       <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+        <form onSubmit={handleSearch} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <TextField
+            label="Search nodes"
+            value={searchKeyword}
+            onChange={e => setSearchKeyword(e.target.value)}
+            size="small"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton type="submit" size="small">
+                    <SearchIcon />
+                  </IconButton>
+                  <IconButton onClick={handleClearSearch} size="small" disabled={!searchKeyword}>
+                    <ClearIcon />
+                  </IconButton>
+                </InputAdornment>
+              )
+            }}
+            sx={{ minWidth: 220 }}
+          />
+        </form>
         <Box sx={{ minWidth: 250 }}>
           <Typography gutterBottom>Zoom</Typography>
           <Slider
@@ -224,10 +268,13 @@ function App() {
                   translate={translate}
                   renderCustomNodeElement={({ nodeDatum }) => {
                     const isSelected = selectedNode && nodeDatum.name === selectedNode.name;
+                    const isMatched = matchedNodeNames.includes(nodeDatum.name);
                     const isOwnedBySelected = ownerFilter !== 'All' && nodeDatum.attributes?.owner === ownerFilter;
                     let fillColor = '#fff';
                     if (isSelected) {
                       fillColor = '#90ee90';
+                    } else if (isMatched) {
+                      fillColor = 'orange';
                     } else if (isOwnedBySelected) {
                       fillColor = 'orange';
                     } else if (nodeDatum.children) {

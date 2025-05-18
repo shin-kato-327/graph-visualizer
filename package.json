@@ -1,5 +1,8 @@
 {
   "devDependencies": {
     "@types/js-yaml": "^4.0.9"
+  },
+  "dependencies": {
+    "@mui/icons-material": "^7.1.0"
   }
 }
