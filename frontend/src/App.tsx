@@ -113,15 +113,15 @@ function App() {
   };
 
   const handleAddChild = async () => {
-    if (!selectedNode || !newChildNode.name || !newChildNode.description || !newChildNode.owner) {
+    if (!selectedNode || !newChildNode.name) {
       return;
     }
 
     // Build the YAML string for the new node
     const yamlString = dump({
       name: newChildNode.name,
-      description: newChildNode.description,
-      owner: newChildNode.owner,
+      description: newChildNode.description || '',
+      owner: newChildNode.owner || '',
       childof: selectedNode.name
     });
 
@@ -353,14 +353,15 @@ function App() {
           <TextField
             autoFocus
             margin="dense"
-            label="Name"
+            label="Name *"
             fullWidth
+            required
             value={newChildNode.name}
             onChange={(e) => setNewChildNode({ ...newChildNode, name: e.target.value })}
           />
           <TextField
             margin="dense"
-            label="Description"
+            label="Description (optional)"
             fullWidth
             multiline
             rows={3}
@@ -369,7 +370,7 @@ function App() {
           />
           <TextField
             margin="dense"
-            label="Owner"
+            label="Owner (optional)"
             fullWidth
             value={newChildNode.owner}
             onChange={(e) => setNewChildNode({ ...newChildNode, owner: e.target.value })}
