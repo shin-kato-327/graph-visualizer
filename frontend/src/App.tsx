@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Box, Paper, Typography, FormControl, InputLabel, Select, MenuItem, Slider } from '@mui/material';
+import { Container, Box, Paper, Typography, FormControl, InputLabel, Select, MenuItem, Slider, Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import Tree from 'react-d3-tree';
 import axios from 'axios';
 import { TaxonomyNode, TreeNode } from './types';
@@ -14,6 +14,12 @@ function App() {
   const [verticalSpacing, setVerticalSpacing] = useState(60);
   const [zoomLevel, setZoomLevel] = useState(0.6);
   const [translate, setTranslate] = useState({ x: 100, y: 200 });
+  const [isAddChildDialogOpen, setIsAddChildDialogOpen] = useState(false);
+  const [newChildNode, setNewChildNode] = useState({
+    name: '',
+    description: '',
+    owner: '',
+  });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -99,6 +105,80 @@ function App() {
       setSelectedNode(response.data);
     } catch (error) {
       console.error('Error fetching node details:', error);
+    }
+  };
+
+  const handleAddChild = async () => {
+    if (!selectedNode || !newChildNode.name || !newChildNode.description || !newChildNode.owner) {
+      return;
+    }
+
+    // Build the YAML string for the new node
+    const yamlString = dump({
+      name: newChildNode.name,
+      description: newChildNode.description,
+      owner: newChildNode.owner,
+      childof: selectedNode.name
+    });
+
+    try {
+      await axios.post('http://localhost:3001/api/taxonomy', {
+        parent: selectedNode.name,
+        yaml: yamlString
+      });
+
+      // Refresh the tree data
+      const updatedResponse = await axios.get('http://localhost:3001/api/taxonomy');
+      const nodes: TaxonomyNode[] = updatedResponse.data;
+      setAllNodes(nodes);
+      
+      // Convert flat structure to tree
+      const nodeMap = new Map<string, TreeNode>();
+      const rootNodes: TreeNode[] = [];
+
+      // First pass: Create all nodes
+      nodes.forEach(node => {
+        nodeMap.set(node.name, {
+          name: node.name,
+          attributes: {
+            description: node.description,
+            owner: node.owner,
+            filename: node.filename
+          },
+          children: []
+        });
+      });
+
+      // Second pass: Build tree structure
+      nodes.forEach(node => {
+        const treeNode = nodeMap.get(node.name)!;
+        if (node.parent === null) {
+          rootNodes.push(treeNode);
+        } else {
+          const parentNode = nodeMap.get(node.parent);
+          if (parentNode) {
+            parentNode.children = parentNode.children || [];
+            parentNode.children.push(treeNode);
+          }
+        }
+      });
+
+      // Support multiple top-level nodes
+      if (rootNodes.length === 1) {
+        setTreeData(rootNodes[0]);
+      } else {
+        setTreeData({
+          name: 'root',
+          attributes: { description: '', owner: '', filename: '' },
+          children: rootNodes,
+        });
+      }
+
+      setNewChildNode({ name: '', description: '', owner: '' });
+      setIsAddChildDialogOpen(false);
+    } catch (error) {
+      console.error('Error creating child node:', error);
+      alert('Error creating child node: ' + error);
     }
   };
 
@@ -202,6 +282,14 @@ function App() {
                     {dump(selectedNode)}
                   </code>
                 </pre>
+                <Button 
+                  variant="contained" 
+                  color="primary" 
+                  onClick={() => setIsAddChildDialogOpen(true)}
+                  sx={{ mt: 2 }}
+                >
+                  Add Child Node
+                </Button>
               </>
             ) : (
               <Typography variant="body1">
@@ -211,6 +299,42 @@ function App() {
           </Paper>
         </Box>
       </Box>
+
+      <Dialog open={isAddChildDialogOpen} onClose={() => setIsAddChildDialogOpen(false)}>
+        <DialogTitle>Add Child Node</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Name"
+            fullWidth
+            value={newChildNode.name}
+            onChange={(e) => setNewChildNode({ ...newChildNode, name: e.target.value })}
+          />
+          <TextField
+            margin="dense"
+            label="Description"
+            fullWidth
+            multiline
+            rows={3}
+            value={newChildNode.description}
+            onChange={(e) => setNewChildNode({ ...newChildNode, description: e.target.value })}
+          />
+          <TextField
+            margin="dense"
+            label="Owner"
+            fullWidth
+            value={newChildNode.owner}
+            onChange={(e) => setNewChildNode({ ...newChildNode, owner: e.target.value })}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsAddChildDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleAddChild} variant="contained" color="primary">
+            Add
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }
