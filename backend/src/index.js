@@ -5,6 +5,7 @@ const neo4j = require('neo4j-driver');
 const yaml = require('js-yaml');
 const fs = require('fs');
 const path = require('path');
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -128,6 +129,34 @@ app.get('/api/taxonomy/:filename', (req, res) => {
     res.json(yaml.load(content));
   } catch (error) {
     res.status(404).json({ error: 'File not found' });
+  }
+});
+
+app.post('/api/taxonomy', async (req, res) => {
+  try {
+    const { parent, yaml: yamlString } = req.body;
+    if (!parent || !yamlString) {
+      return res.status(400).json({ error: 'Missing parent or yaml' });
+    }
+    // Parse YAML to ensure it's valid
+    let parsed;
+    try {
+      parsed = yaml.load(yamlString);
+    } catch (e) {
+      return res.status(400).json({ error: 'Invalid YAML' });
+    }
+    // Ensure childof is set to parent
+    parsed.childof = parent;
+    // Generate a unique filename
+    const filename = `${parsed.name || 'node'}_${uuidv4().slice(0, 8)}.yaml`;
+    const filePath = path.join(__dirname, '../../taxonomy', filename);
+    // Save YAML file
+    fs.writeFileSync(filePath, yaml.dump(parsed), 'utf8');
+    // Optionally, reload the database
+    await initializeDatabase();
+    res.json({ success: true, filename });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
