@@ -122,6 +122,27 @@ app.get('/api/taxonomy', async (req, res) => {
   }
 });
 
+app.get('/api/taxonomy/nodes-depth-two', async (req, res) => {
+  const session = driver.session();
+  try {
+    const query = `
+      MATCH (grandchild:TaxonomyNode)-[:CHILD_OF]->(child:TaxonomyNode)-[:CHILD_OF]->(root:TaxonomyNode)
+      WHERE NOT (root)-[:CHILD_OF]->()
+      RETURN grandchild
+    `;
+    const result = await session.run(query);
+    const collectedGrandchildrenProperties = result.records.map(record => {
+      return record.get('grandchild').properties;
+    });
+    res.json(collectedGrandchildrenProperties);
+  } catch (error) {
+    console.error('Error fetching depth-two nodes:', error); // Added console log for server-side error visibility
+    res.status(500).json({ error: error.message });
+  } finally {
+    await session.close();
+  }
+});
+
 app.get('/api/taxonomy/:filename', (req, res) => {
   try {
     const filePath = path.join(__dirname, '../../taxonomy', req.params.filename);
@@ -161,8 +182,12 @@ app.post('/api/taxonomy', async (req, res) => {
 });
 
 // Initialize database and start server
-initializeDatabase().then(() => {
-  app.listen(port, () => {
-    console.log(`Server running on port ${port}`);
+if (require.main === module) {
+  initializeDatabase().then(() => {
+    app.listen(port, () => {
+      console.log(`Server running on port ${port}`);
+    });
   });
-}); 
+}
+
+module.exports = app; // Export the Express app
