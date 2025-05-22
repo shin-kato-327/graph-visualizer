@@ -23,7 +23,9 @@ const driver = neo4j.driver(
 
 // Function to read and parse YAML files
 function readYamlFiles() {
-  const taxonomyDir = path.join(__dirname, '../../taxonomy');
+  // __dirname points to <repo root>/src. The taxonomy folder is at the
+  // repository root, so only go up one level.
+  const taxonomyDir = path.join(__dirname, '../taxonomy');
   const files = fs.readdirSync(taxonomyDir);
   return files
     .filter(file => file.endsWith('.yaml'))
@@ -93,7 +95,8 @@ app.get('/api/taxonomy', async (req, res) => {
 
 app.get('/api/taxonomy/:filename', (req, res) => {
   try {
-    const filePath = path.join(__dirname, '../../taxonomy', req.params.filename);
+    // Files are stored in the taxonomy folder one level above this file
+    const filePath = path.join(__dirname, '../taxonomy', req.params.filename);
     const content = fs.readFileSync(filePath, 'utf8');
     res.json(yaml.load(content));
   } catch (error) {
