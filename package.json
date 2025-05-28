@@ -3,6 +3,7 @@
     "@types/js-yaml": "^4.0.9"
   },
   "dependencies": {
-    "@mui/icons-material": "^7.1.0"
+    "@mui/icons-material": "^7.1.0",
+    "react-force-graph": "^1.47.6"
   }
 }

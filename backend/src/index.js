@@ -22,6 +22,10 @@ const driver = neo4j.driver(
   )
 );
 
+// Import Neo4j routes
+const neo4jRoutes = require('./neo4jRoutes')(driver);
+app.use('/api/neo4j', neo4jRoutes);
+
 // Function to read and parse YAML files
 function readYamlFiles() {
   const taxonomyDir = path.join(__dirname, '../../taxonomy');
@@ -165,4 +169,4 @@ initializeDatabase().then(() => {
   app.listen(port, () => {
     console.log(`Server running on port ${port}`);
   });
-}); 
+});
