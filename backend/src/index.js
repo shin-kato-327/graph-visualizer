@@ -71,7 +71,7 @@ async function initializeDatabase() {
                         node.benchmark ? node.benchmark : '';
 
       await session.run(
-        'CREATE (n:TaxonomyNode {name: $name, description: $description, owner: $owner, filename: $filename, usecaseDescription: $usecaseDescription, usecaseExample: $usecaseExample, benchmarks: $benchmarks})',
+        'CREATE (n:TaxonomyNode {name: $name, description: $description, owner: $owner, filename: $filename, usecaseDescription: $usecaseDescription, usecaseExample: $usecaseExample, benchmarks: $benchmarks, location: $location, type: $type})',
         {
           name: node.name,
           description: node.description || '',
@@ -79,7 +79,9 @@ async function initializeDatabase() {
           filename: node.filename,
           usecaseDescription,
           usecaseExample,
-          benchmarks
+          benchmarks,
+          location: node.location || '999',
+          type: node.type || ''
         }
       );
     }
@@ -111,6 +113,7 @@ app.get('/api/taxonomy', async (req, res) => {
       MATCH (n:TaxonomyNode)
       OPTIONAL MATCH (n)-[:CHILD_OF]->(parent:TaxonomyNode)
       RETURN n, parent
+      ORDER BY n.location
     `);
     
     const nodes = result.records.map(record => ({
