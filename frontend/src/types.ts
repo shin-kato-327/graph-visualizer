@@ -5,6 +5,8 @@ export interface TaxonomyNode {
   filename: string;
   parent: string | null;
   benchmark?: string;
+  location?: string;
+  type?: string;
 }
 
 export interface TreeNode {
@@ -13,6 +15,10 @@ export interface TreeNode {
     description: string;
     owner: string | string[];
     filename: string;
+    location?: string;
+    type?: string;
+    hasHiddenChildren?: boolean;
+    hasChildren?: boolean;
   };
   children?: TreeNode[];
 } 

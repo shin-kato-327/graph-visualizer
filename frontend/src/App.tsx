@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Container, Box, Paper, Typography, FormControl, InputLabel, Select, MenuItem, Slider, Button, TextField, Dialog, DialogTitle, DialogContent, DialogActions, InputAdornment, IconButton, Tabs, Tab } from '@mui/material';
 import Tree from 'react-d3-tree';
 import axios from 'axios';
@@ -48,22 +48,32 @@ function App() {
   const [allNodes, setAllNodes] = useState<TaxonomyNode[]>([]);
   const [ownerFilter, setOwnerFilter] = useState<string>('All');
   const [owners, setOwners] = useState<string[]>([]);
-  const [verticalSpacing, setVerticalSpacing] = useState(60);
+  const [verticalSpacing, setVerticalSpacing] = useState(35);
   const [zoomLevel, setZoomLevel] = useState(0.6);
-  const [translate, setTranslate] = useState({ x: 100, y: 200 });
+  const [translate, setTranslate] = useState({ x: 200, y: 350 });
   const [isAddChildDialogOpen, setIsAddChildDialogOpen] = useState(false);
   const [newChildNode, setNewChildNode] = useState({
     name: '',
     description: '',
     owner: '',
+    location: '',
+    type: '',
   });
   const [searchKeyword, setSearchKeyword] = useState('');
   const [matchedNodeNames, setMatchedNodeNames] = useState<string[]>([]);
   const [tabValue, setTabValue] = useState(0);
+  const [treeDepth, setTreeDepth] = useState<number>(3);
+  // Store expanded node names directly
+  const [expandedNodes, setExpandedNodes] = useState<string[]>([]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
+
+  // Re-render when expandedNodes changes
+  useEffect(() => {
+    console.log("Expanded nodes changed:", expandedNodes);
+  }, [expandedNodes]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -117,7 +127,9 @@ function App() {
             attributes: {
               description: node.description,
               owner: node.owner,
-              filename: node.filename
+              filename: node.filename,
+              location: node.location || '999', // Default high value for nodes without location
+              type: node.type || ''
             },
             children: []
           });
@@ -136,6 +148,33 @@ function App() {
             }
           }
         });
+        
+        // Sort function for nodes based on location
+        const sortNodesByLocation = (nodes: TreeNode[]): TreeNode[] => {
+          return [...nodes].sort((a, b) => {
+            const locA = a.attributes?.location ? String(a.attributes.location) : '999';
+            const locB = b.attributes?.location ? String(b.attributes.location) : '999';
+            return locA.localeCompare(locB);
+          });
+        };
+        
+        // Sort all nodes by location
+        rootNodes.sort((a, b) => {
+          const locA = a.attributes?.location ? String(a.attributes.location) : '999';
+          const locB = b.attributes?.location ? String(b.attributes.location) : '999';
+          return locA.localeCompare(locB);
+        });
+        
+        // Sort children recursively
+        const sortChildrenRecursively = (node: TreeNode) => {
+          if (node.children && node.children.length > 0) {
+            node.children = sortNodesByLocation(node.children);
+            node.children.forEach(sortChildrenRecursively);
+          }
+        };
+        
+        // Apply sorting to all nodes
+        rootNodes.forEach(sortChildrenRecursively);
 
         // Support multiple top-level nodes
         if (rootNodes.length === 1) {
@@ -192,6 +231,9 @@ function App() {
     // Combine with parent owners for inheritance
     const combinedOwners = nodeOwner ? nodeOwner : parentOwners;
     
+    // We don't need this anymore as we're using attributes.hasHiddenChildren
+    const hasHiddenChildren = false;
+    
     const rawNode: RawNodeDatum = {
       name: node.name,
       children: node.children?.map(child => convertToRawNodeDatum(child, combinedOwners))
@@ -203,37 +245,115 @@ function App() {
         filename: node.attributes.filename,
         // Store both actual owner and inherited owners for highlighting
         owner: nodeOwner,
-        inheritedOwners: combinedOwners
+        inheritedOwners: combinedOwners,
+        type: node.attributes.type || '',
+        hasHiddenChildren: node.attributes.hasHiddenChildren || false,
+        hasChildren: node.attributes.hasChildren || false
       };
     }
+    
+    // Store the node name for reference
+    (rawNode as any).__rd3t = {
+      nodeName: node.name
+    };
     
     return rawNode;
   }
+  
+  // No longer needed - removing findNodeByPath function
 
-  // No longer filtering nodes, just passing through the entire tree
-  function processTree(node: TreeNode): TreeNode {
+  // Process tree with depth limiting and expanded nodes
+  function processTree(node: TreeNode, currentDepth: number = 1): TreeNode {
     if (!node) return node;
     
-    // Process children recursively
+    // Create a copy of the node
+    const processedNode = { ...node };
+    
+    // Check if this node is expanded or within the default depth
+    const isExpanded = expandedNodes.includes(node.name);
+    const isWithinDefaultDepth = currentDepth < treeDepth;
+    
+    // Mark if this node has children
     if (node.children && node.children.length > 0) {
-      return {
-        ...node,
-        children: node.children.map(child => processTree(child))
-      };
+      if (!processedNode.attributes) {
+        processedNode.attributes = {
+          description: '',
+          owner: '',
+          filename: '',
+        };
+      }
+      processedNode.attributes.hasChildren = true;
     }
     
-    return node;
+    // If we've reached the max depth and the node is not expanded, don't include children
+    if (!isWithinDefaultDepth && !isExpanded) {
+      // If we're hiding children, mark this node
+      if (node.children && node.children.length > 0) {
+        if (!processedNode.attributes) {
+          processedNode.attributes = {
+            description: '',
+            owner: '',
+            filename: '',
+          };
+        }
+        processedNode.attributes.hasHiddenChildren = true;
+      }
+      return { ...processedNode, children: [] };
+    }
+    
+    // Process children recursively if they exist
+    if (node.children && node.children.length > 0) {
+      processedNode.children = node.children.map(child => 
+        processTree(child, currentDepth + 1)
+      );
+    }
+    
+    return processedNode;
   }
 
-  // Process the tree without filtering, then convert to RawNodeDatum for react-d3-tree
-  // Start with empty parent owners since we're at the root
-  const processedTreeNode = treeData ? processTree(treeData) : null;
-  const processedTree = processedTreeNode ? convertToRawNodeDatum(processedTreeNode, '') : null;
+  // Process the tree with depth limiting and expanded nodes, then convert to RawNodeDatum for react-d3-tree
+  const processedTreeNode = useMemo(() => {
+    return treeData ? processTree(treeData, 1) : null;
+  }, [treeData, treeDepth, expandedNodes]);
+  
+  const processedTree = useMemo(() => {
+    return processedTreeNode ? convertToRawNodeDatum(processedTreeNode, '') : null;
+  }, [processedTreeNode]);
 
-  const handleNodeClick = async (nodeData: any) => {
+  const [selectedNodeScorecard, setSelectedNodeScorecard] = useState<any>(null);
+
+  const handleNodeClick = async (nodeData: any, evt: any) => {
     try {
+      // Get node details
       const response = await axios.get(`http://localhost:3001/api/taxonomy/${nodeData.data.attributes.filename}`);
       setSelectedNode(response.data);
+      
+      // Check if there's a scorecard for this node using the node name
+      try {
+        console.log('Looking for scorecard for node:', nodeData.data.name);
+        const scorecardResponse = await axios.get(`http://localhost:3001/api/taxonomy/scorecard/node/${encodeURIComponent(nodeData.data.name)}`);
+        console.log('Scorecard found:', scorecardResponse.data);
+        setSelectedNodeScorecard(scorecardResponse.data);
+      } catch (scorecardError) {
+        // No scorecard found, clear any previous scorecard
+        console.log('No scorecard found:', scorecardError);
+        setSelectedNodeScorecard(null);
+      }
+      
+      // Toggle expanded state if Alt/Option key is pressed
+      if (evt && evt.altKey) {
+        const nodeName = nodeData.data.name;
+        
+        setExpandedNodes(prevExpanded => {
+          if (prevExpanded.includes(nodeName)) {
+            // Remove node from expanded list
+            return prevExpanded.filter(name => name !== nodeName);
+          } else {
+            // Add node to expanded list
+            return [...prevExpanded, nodeName];
+          }
+        });
+      }
     } catch (error) {
       console.error('Error fetching node details:', error);
     }
@@ -249,7 +369,9 @@ function App() {
       name: newChildNode.name,
       description: newChildNode.description || '',
       owner: newChildNode.owner || '',
-      childof: selectedNode.name
+      childof: selectedNode.name,
+      location: newChildNode.location || '999',
+      type: newChildNode.type || ''
     });
 
     try {
@@ -274,7 +396,9 @@ function App() {
           attributes: {
             description: node.description,
             owner: node.owner,
-            filename: node.filename
+            filename: node.filename,
+            location: node.location || '999', // Default high value for nodes without location
+            type: node.type || ''
           },
           children: []
         });
@@ -293,6 +417,33 @@ function App() {
           }
         }
       });
+      
+      // Sort function for nodes based on location
+      const sortNodesByLocation = (nodes: TreeNode[]): TreeNode[] => {
+        return [...nodes].sort((a, b) => {
+          const locA = a.attributes?.location ? String(a.attributes.location) : '999';
+          const locB = b.attributes?.location ? String(b.attributes.location) : '999';
+          return locA.localeCompare(locB);
+        });
+      };
+      
+      // Sort all nodes by location
+      rootNodes.sort((a, b) => {
+        const locA = a.attributes?.location ? String(a.attributes.location) : '999';
+        const locB = b.attributes?.location ? String(b.attributes.location) : '999';
+        return locA.localeCompare(locB);
+      });
+      
+      // Sort children recursively
+      const sortChildrenRecursively = (node: TreeNode) => {
+        if (node.children && node.children.length > 0) {
+          node.children = sortNodesByLocation(node.children);
+          node.children.forEach(sortChildrenRecursively);
+        }
+      };
+      
+      // Apply sorting to all nodes
+      rootNodes.forEach(sortChildrenRecursively);
 
       // Support multiple top-level nodes
       if (rootNodes.length === 1) {
@@ -305,7 +456,7 @@ function App() {
         });
       }
 
-      setNewChildNode({ name: '', description: '', owner: '' });
+      setNewChildNode({ name: '', description: '', owner: '', location: '', type: '' });
       setIsAddChildDialogOpen(false);
     } catch (error) {
       console.error('Error creating child node:', error);
@@ -406,6 +557,21 @@ function App() {
               ))}
             </Select>
           </FormControl>
+          <FormControl size="small" sx={{ minWidth: 120 }}>
+            <InputLabel id="depth-filter-label">Tree Depth</InputLabel>
+            <Select
+              labelId="depth-filter-label"
+              value={treeDepth}
+              label="Tree Depth"
+              onChange={(e) => setTreeDepth(Number(e.target.value))}
+            >
+              {[1, 2, 3, 4, 5].map((depth) => (
+                <MenuItem key={depth} value={depth}>
+                  {depth}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           <Box sx={{ minWidth: 250 }}>
             <Typography gutterBottom>Zoom</Typography>
             <Slider
@@ -426,6 +592,7 @@ function App() {
               step={5}
               onChange={(_, value) => setVerticalSpacing(value as number)}
               valueLabelDisplay="auto"
+              defaultValue={35}
             />
           </Box>
         </Box>
@@ -433,16 +600,45 @@ function App() {
           <Box sx={{ flex: 2 }}>
             <Paper sx={{ p: 2, height: '100%' }}>
               {processedTree && (
-                <div style={{ width: '100%', height: '100%' }}>
+                <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+                  {/* Legend in top left corner */}
+                  <Box sx={{ 
+                    position: 'absolute', 
+                    top: 10, 
+                    left: 10, 
+                    zIndex: 10, 
+                    bgcolor: 'rgba(255,255,255,0.9)',
+                    border: '1px solid #ddd', 
+                    p: 1, 
+                    borderRadius: 1,
+                    boxShadow: 1
+                  }}>
+                    <Typography variant="subtitle2" sx={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Legend:</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                      <svg width="16" height="16" style={{ marginRight: '6px' }}>
+                        <circle cx="8" cy="8" r="7" fill="#ADD8E6" stroke="#333" strokeWidth="1" />
+                      </svg>
+                      <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>Vertical Capabilities</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <svg width="16" height="16" style={{ marginRight: '6px' }}>
+                        <rect x="1" y="1" width="14" height="14" fill="#FFFACD" stroke="#333" strokeWidth="1" />
+                      </svg>
+                      <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>Horizontal Capabilities</Typography>
+                    </Box>
+                  </Box>
+                  
                   <Tree
                     data={processedTree}
                     orientation="horizontal"
-                    onNodeClick={handleNodeClick}
+                    onNodeClick={(nodeData, evt) => handleNodeClick(nodeData, evt)}
                     pathFunc="step"
                     nodeSize={{ x: 200, y: verticalSpacing }}
                     separation={{ siblings: 2, nonSiblings: 2.5 }}
                     zoom={zoomLevel}
                     translate={translate}
+                    enableLegacyTransitions={true}
+                    collapsible={false}
                     renderCustomNodeElement={({ nodeDatum }) => {
                       const isSelected = selectedNode && nodeDatum.name === selectedNode.name;
                       const isMatched = matchedNodeNames.includes(nodeDatum.name);
@@ -454,44 +650,102 @@ function App() {
                         (nodeDatum.attributes?.inheritedOwners && 
                          String(nodeDatum.attributes.inheritedOwners).toLowerCase().includes(ownerFilter.toLowerCase()))
                       );
-                      let fillColor = '#fff';
+                      // Default colors based on node type
+                      let fillColor = nodeDatum.attributes?.type === 'horizontal' ? '#FFFACD' : '#ADD8E6'; // Light yellow for horizontal, light blue for others
+                      
+                      // Override with highlight colors if needed
                       if (isSelected) {
-                        fillColor = '#90ee90';
+                        fillColor = '#90ee90'; // Green for selected nodes
                       } else if (isMatched || isOwnedBySelected) {
-                        fillColor = 'orange';
+                        fillColor = 'orange'; // Orange for search/owner matches
                       }
                       // Split node name into words and render each on a new line
                       const words = nodeDatum.name.split(' ');
+                      // Truncate to max 2 lines
+                      let displayWords = words;
+                      let truncated = false;
+                      if (words.length > 2) {
+                        displayWords = words.slice(0, 2);
+                        truncated = true;
+                      }
+                      
                       return (
                         <g
                           style={{ cursor: 'pointer' }}
                           onClick={event => {
                             event.stopPropagation();
+                            // Pass the alt key state directly
+                            const altKeyPressed = event.altKey;
+                            console.log("Node clicked, altKey:", altKeyPressed);
+                            
                             handleNodeClick({
                               data: {
                                 attributes: {
                                   ...nodeDatum.attributes
                                 },
                                 name: nodeDatum.name
+                              },
+                              __rd3t: {
+                                nodeName: nodeDatum.name
                               }
-                            });
+                            }, { altKey: altKeyPressed });
                           }}
                         >
                           <text
                             fill="#222"
                             stroke="none"
                             x={0}
-                            y={-22 - (words.length - 1) * 18}
+                            y={-22 - (displayWords.length - 1) * 18}
                             fontSize={16}
                             fontWeight="bold"
                             textAnchor="middle"
                             style={{ pointerEvents: 'none' }}
                           >
-                            {words.map((word, i) => (
-                              <tspan key={i} x={0} dy={i === 0 ? 0 : 18}>{word}</tspan>
+                            {displayWords.map((word, i) => (
+                              <tspan key={i} x={0} dy={i === 0 ? 0 : 18}>
+                                {i === displayWords.length - 1 && truncated ? `${word}...` : word}
+                              </tspan>
                             ))}
                           </text>
-                          <circle r={15} fill={fillColor} stroke="#333" strokeWidth={2} />
+                          <g>
+                            {nodeDatum.attributes?.type === 'horizontal' ? (
+                              <rect x={-15} y={-15} width={30} height={30} fill={fillColor} stroke="#333" strokeWidth={2} />
+                            ) : (
+                              <circle r={15} fill={fillColor} stroke="#333" strokeWidth={2} />
+                            )}
+                            
+                            {/* Indicator for nodes with hidden children */}
+                            {nodeDatum.attributes?.hasHiddenChildren && nodeDatum.attributes?.hasChildren && (
+                              <text
+                                fill="#333"
+                                stroke="none"
+                                x={0}
+                                y={5}
+                                fontSize={16}
+                                fontWeight="bold"
+                                textAnchor="middle"
+                                style={{ pointerEvents: 'none' }}
+                              >
+                                +
+                              </text>
+                            )}
+                            
+                            {/* Indicator for expanded nodes */}
+                            {expandedNodes.includes(nodeDatum.name) && nodeDatum.attributes?.hasChildren && (
+                              <text
+                                fill="#333"
+                                stroke="none"
+                                x={0}
+                                y={5}
+                                fontSize={16}
+                                fontWeight="bold"
+                                textAnchor="middle"
+                                style={{ pointerEvents: 'none' }}
+                              >
+                                -
+                              </text>
+                            )}
+                          </g>
                         </g>
                       );
                     }}
@@ -504,11 +758,24 @@ function App() {
             <Paper sx={{ p: 2, height: '100%', width: 400, boxSizing: 'border-box', overflow: 'hidden' }}>
               {selectedNode ? (
                 <>
+                  <Typography variant="h6" gutterBottom>Node Details</Typography>
                   <pre style={{ background: '#f5f5f5', padding: '12px', borderRadius: '6px', fontSize: '14px', overflowX: 'auto', maxWidth: '100%' }}>
                     <code>
                       {dump(selectedNode)}
                     </code>
                   </pre>
+                  
+                  {selectedNodeScorecard && (
+                    <>
+                      <Typography variant="h6" sx={{ mt: 3 }} gutterBottom>Scorecard</Typography>
+                      <pre style={{ background: '#f5f5f5', padding: '12px', borderRadius: '6px', fontSize: '14px', overflowX: 'auto', maxWidth: '100%' }}>
+                        <code>
+                          {dump(selectedNodeScorecard)}
+                        </code>
+                      </pre>
+                    </>
+                  )}
+                  
                   <Button 
                     variant="contained" 
                     color="primary" 
@@ -519,9 +786,22 @@ function App() {
                   </Button>
                 </>
               ) : (
-                <Typography variant="body1">
-                  Click on a node to view its details
-                </Typography>
+                <div>
+                  <Typography variant="body1">
+                    Click on a node to view its details
+                  </Typography>
+                  <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
+                    Hold Alt/Option key while clicking to expand/collapse nodes
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                    + indicates node has hidden children
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                    - indicates node is expanded
+                  </Typography>
+                  
+
+                </div>
               )}
             </Paper>
           </Box>
@@ -559,6 +839,22 @@ function App() {
             fullWidth
             value={newChildNode.owner}
             onChange={(e) => setNewChildNode({ ...newChildNode, owner: e.target.value })}
+          />
+          <TextField
+            margin="dense"
+            label="Location (optional, e.g. 0.1, 1.2)"
+            fullWidth
+            value={newChildNode.location}
+            onChange={(e) => setNewChildNode({ ...newChildNode, location: e.target.value })}
+            helperText="Lower values appear first in the tree"
+          />
+          <TextField
+            margin="dense"
+            label="Type (optional, e.g. horizontal)"
+            fullWidth
+            value={newChildNode.type}
+            onChange={(e) => setNewChildNode({ ...newChildNode, type: e.target.value })}
+            helperText="Use 'horizontal' for square nodes"
           />
         </DialogContent>
         <DialogActions>

@@ -71,7 +71,7 @@ async function initializeDatabase() {
                         node.benchmark ? node.benchmark : '';
 
       await session.run(
-        'CREATE (n:TaxonomyNode {name: $name, description: $description, owner: $owner, filename: $filename, usecaseDescription: $usecaseDescription, usecaseExample: $usecaseExample, benchmarks: $benchmarks})',
+        'CREATE (n:TaxonomyNode {name: $name, description: $description, owner: $owner, filename: $filename, usecaseDescription: $usecaseDescription, usecaseExample: $usecaseExample, benchmarks: $benchmarks, location: $location, type: $type})',
         {
           name: node.name,
           description: node.description || '',
@@ -79,7 +79,9 @@ async function initializeDatabase() {
           filename: node.filename,
           usecaseDescription,
           usecaseExample,
-          benchmarks
+          benchmarks,
+          location: node.location || '999',
+          type: node.type || ''
         }
       );
     }
@@ -111,6 +113,7 @@ app.get('/api/taxonomy', async (req, res) => {
       MATCH (n:TaxonomyNode)
       OPTIONAL MATCH (n)-[:CHILD_OF]->(parent:TaxonomyNode)
       RETURN n, parent
+      ORDER BY n.location
     `);
     
     const nodes = result.records.map(record => ({
@@ -123,6 +126,34 @@ app.get('/api/taxonomy', async (req, res) => {
     res.status(500).json({ error: error.message });
   } finally {
     await session.close();
+  }
+});
+
+// Add endpoint to get scorecard by node name
+app.get('/api/taxonomy/scorecard/node/:nodeName', (req, res) => {
+  try {
+    const nodeName = req.params.nodeName;
+    console.log('Looking for scorecard for node:', nodeName);
+    
+    const scorecardDir = path.join(__dirname, '../../taxonomy/scorecard');
+    const scorecardFiles = fs.readdirSync(scorecardDir).filter(file => file.endsWith('.yaml'));
+    
+    for (const file of scorecardFiles) {
+      const filePath = path.join(scorecardDir, file);
+      const content = fs.readFileSync(filePath, 'utf8');
+      const data = yaml.load(content);
+      
+      if (data.scoreOf === nodeName) {
+        console.log('Found scorecard for', nodeName, 'in file:', file);
+        return res.json(data);
+      }
+    }
+    
+    console.log('No scorecard found for node:', nodeName);
+    res.status(404).json({ error: 'Scorecard not found' });
+  } catch (error) {
+    console.error('Scorecard error:', error.message);
+    res.status(500).json({ error: 'Error processing scorecard request' });
   }
 });
 
