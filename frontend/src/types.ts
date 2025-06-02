@@ -18,6 +18,7 @@ export interface TreeNode {
     location?: string;
     type?: string;
     hasHiddenChildren?: boolean;
+    hasChildren?: boolean;
   };
   children?: TreeNode[];
 } 

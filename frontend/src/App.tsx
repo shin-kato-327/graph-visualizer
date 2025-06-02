@@ -50,7 +50,7 @@ function App() {
   const [owners, setOwners] = useState<string[]>([]);
   const [verticalSpacing, setVerticalSpacing] = useState(35);
   const [zoomLevel, setZoomLevel] = useState(0.6);
-  const [translate, setTranslate] = useState({ x: 100, y: 200 });
+  const [translate, setTranslate] = useState({ x: 200, y: 350 });
   const [isAddChildDialogOpen, setIsAddChildDialogOpen] = useState(false);
   const [newChildNode, setNewChildNode] = useState({
     name: '',
@@ -62,7 +62,7 @@ function App() {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [matchedNodeNames, setMatchedNodeNames] = useState<string[]>([]);
   const [tabValue, setTabValue] = useState(0);
-  const [treeDepth, setTreeDepth] = useState<number>(4);
+  const [treeDepth, setTreeDepth] = useState<number>(3);
   // Store expanded node names directly
   const [expandedNodes, setExpandedNodes] = useState<string[]>([]);
 
@@ -231,8 +231,8 @@ function App() {
     // Combine with parent owners for inheritance
     const combinedOwners = nodeOwner ? nodeOwner : parentOwners;
     
-    // Check if this node has children that might be hidden
-    const hasHiddenChildren = !!(node.children && node.children.length === 0);
+    // We don't need this anymore as we're using attributes.hasHiddenChildren
+    const hasHiddenChildren = false;
     
     const rawNode: RawNodeDatum = {
       name: node.name,
@@ -247,7 +247,8 @@ function App() {
         owner: nodeOwner,
         inheritedOwners: combinedOwners,
         type: node.attributes.type || '',
-        hasHiddenChildren: hasHiddenChildren
+        hasHiddenChildren: node.attributes.hasHiddenChildren || false,
+        hasChildren: node.attributes.hasChildren || false
       };
     }
     
@@ -272,7 +273,7 @@ function App() {
     const isExpanded = expandedNodes.includes(node.name);
     const isWithinDefaultDepth = currentDepth < treeDepth;
     
-    // Mark if this node has children that might be hidden
+    // Mark if this node has children
     if (node.children && node.children.length > 0) {
       if (!processedNode.attributes) {
         processedNode.attributes = {
@@ -281,6 +282,7 @@ function App() {
           filename: '',
         };
       }
+      processedNode.attributes.hasChildren = true;
     }
     
     // If we've reached the max depth and the node is not expanded, don't include children
@@ -318,11 +320,25 @@ function App() {
     return processedTreeNode ? convertToRawNodeDatum(processedTreeNode, '') : null;
   }, [processedTreeNode]);
 
+  const [selectedNodeScorecard, setSelectedNodeScorecard] = useState<any>(null);
+
   const handleNodeClick = async (nodeData: any, evt: any) => {
     try {
       // Get node details
       const response = await axios.get(`http://localhost:3001/api/taxonomy/${nodeData.data.attributes.filename}`);
       setSelectedNode(response.data);
+      
+      // Check if there's a scorecard for this node using the node name
+      try {
+        console.log('Looking for scorecard for node:', nodeData.data.name);
+        const scorecardResponse = await axios.get(`http://localhost:3001/api/taxonomy/scorecard/node/${encodeURIComponent(nodeData.data.name)}`);
+        console.log('Scorecard found:', scorecardResponse.data);
+        setSelectedNodeScorecard(scorecardResponse.data);
+      } catch (scorecardError) {
+        // No scorecard found, clear any previous scorecard
+        console.log('No scorecard found:', scorecardError);
+        setSelectedNodeScorecard(null);
+      }
       
       // Toggle expanded state if Alt/Option key is pressed
       if (evt && evt.altKey) {
@@ -584,7 +600,34 @@ function App() {
           <Box sx={{ flex: 2 }}>
             <Paper sx={{ p: 2, height: '100%' }}>
               {processedTree && (
-                <div style={{ width: '100%', height: '100%' }}>
+                <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+                  {/* Legend in top left corner */}
+                  <Box sx={{ 
+                    position: 'absolute', 
+                    top: 10, 
+                    left: 10, 
+                    zIndex: 10, 
+                    bgcolor: 'rgba(255,255,255,0.9)',
+                    border: '1px solid #ddd', 
+                    p: 1, 
+                    borderRadius: 1,
+                    boxShadow: 1
+                  }}>
+                    <Typography variant="subtitle2" sx={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Legend:</Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                      <svg width="16" height="16" style={{ marginRight: '6px' }}>
+                        <circle cx="8" cy="8" r="7" fill="#ADD8E6" stroke="#333" strokeWidth="1" />
+                      </svg>
+                      <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>Vertical Capabilities</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <svg width="16" height="16" style={{ marginRight: '6px' }}>
+                        <rect x="1" y="1" width="14" height="14" fill="#FFFACD" stroke="#333" strokeWidth="1" />
+                      </svg>
+                      <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>Horizontal Capabilities</Typography>
+                    </Box>
+                  </Box>
+                  
                   <Tree
                     data={processedTree}
                     orientation="horizontal"
@@ -672,7 +715,7 @@ function App() {
                             )}
                             
                             {/* Indicator for nodes with hidden children */}
-                            {nodeDatum.attributes?.hasHiddenChildren && (
+                            {nodeDatum.attributes?.hasHiddenChildren && nodeDatum.attributes?.hasChildren && (
                               <text
                                 fill="#333"
                                 stroke="none"
@@ -688,7 +731,7 @@ function App() {
                             )}
                             
                             {/* Indicator for expanded nodes */}
-                            {expandedNodes.includes(nodeDatum.name) && (
+                            {expandedNodes.includes(nodeDatum.name) && nodeDatum.attributes?.hasChildren && (
                               <text
                                 fill="#333"
                                 stroke="none"
@@ -715,11 +758,24 @@ function App() {
             <Paper sx={{ p: 2, height: '100%', width: 400, boxSizing: 'border-box', overflow: 'hidden' }}>
               {selectedNode ? (
                 <>
+                  <Typography variant="h6" gutterBottom>Node Details</Typography>
                   <pre style={{ background: '#f5f5f5', padding: '12px', borderRadius: '6px', fontSize: '14px', overflowX: 'auto', maxWidth: '100%' }}>
                     <code>
                       {dump(selectedNode)}
                     </code>
                   </pre>
+                  
+                  {selectedNodeScorecard && (
+                    <>
+                      <Typography variant="h6" sx={{ mt: 3 }} gutterBottom>Scorecard</Typography>
+                      <pre style={{ background: '#f5f5f5', padding: '12px', borderRadius: '6px', fontSize: '14px', overflowX: 'auto', maxWidth: '100%' }}>
+                        <code>
+                          {dump(selectedNodeScorecard)}
+                        </code>
+                      </pre>
+                    </>
+                  )}
+                  
                   <Button 
                     variant="contained" 
                     color="primary" 
@@ -743,6 +799,8 @@ function App() {
                   <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                     - indicates node is expanded
                   </Typography>
+                  
+
                 </div>
               )}
             </Paper>
